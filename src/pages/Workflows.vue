@@ -1,0 +1,795 @@
+<template>
+  <div class="workflows-page">
+    <div class="page-header">
+      <h1>내 워크플로우</h1>
+      <p>등록된 워크플로우를 조회하고 실행하세요</p>
+    </div>
+
+    <div class="workflows-content">
+      <!-- 워크플로우 목록 섹션 -->
+      <el-card class="list-section">
+        <template #header>
+          <div class="section-header">
+            <span>내 워크플로우 ({{ workflows.length }}개)</span>
+            <div class="header-actions">
+              <el-input
+                v-model="searchTerm"
+                placeholder="워크플로우 검색..."
+                style="width: 250px; margin-right: 10px"
+                @input="filterWorkflows"
+              >
+                <template #prefix>
+                  <el-icon><Search /></el-icon>
+                </template>
+              </el-input>
+              
+              <el-button @click="loadWorkflows">
+                <el-icon><Refresh /></el-icon>
+                새로고침
+              </el-button>
+            </div>
+          </div>
+        </template>
+
+        <div v-if="loading.list" class="loading-container">
+          <el-skeleton :rows="5" animated />
+        </div>
+
+        <div v-else-if="filteredWorkflows.length === 0" class="empty-container">
+          <el-empty 
+            :image-size="120"
+            :description="workflows.length === 0 ? '사용 가능한 워크플로우가 없습니다. 관리자에게 문의하세요.' : '검색 결과가 없습니다'"
+          >
+            <el-button type="primary" @click="$router.push('/admin')" v-if="workflows.length === 0">
+              관리자 페이지로 이동
+            </el-button>
+          </el-empty>
+        </div>
+
+        <div v-else class="workflows-grid">
+          <el-card 
+            v-for="workflow in filteredWorkflows" 
+            :key="workflow.id" 
+            class="workflow-card"
+            shadow="hover"
+          >
+            <template #header>
+              <div class="workflow-card-header">
+                <div class="workflow-title">
+                  <h3>{{ workflow.name }}</h3>
+                  <el-tag size="small" type="info">ID: {{ workflow.id }}</el-tag>
+                  <el-tag 
+                    size="small" 
+                    :type="workflow.status === 'OPEN' ? 'success' : 'warning'"
+                    style="margin-left: 8px"
+                  >
+                    {{ getStatusDisplay(workflow.status) }}
+                  </el-tag>
+                </div>
+                <el-dropdown trigger="click" @command="handleCommand">
+                  <el-button type="text" size="small" class="more-button">
+                    ⋮
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item :command="{action: 'view', workflow}">
+                        <el-icon><View /></el-icon>
+                        상세보기
+                      </el-dropdown-item>
+                      <el-dropdown-item :command="{action: 'export', workflow}">
+                        <el-icon><Download /></el-icon>
+                        JSON 내보내기
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+            </template>
+
+            <div class="workflow-content">
+              <p class="workflow-description">{{ workflow.description || '설명이 없습니다.' }}</p>
+              
+              <div class="workflow-meta">
+                <div class="meta-item">
+                  <el-icon><Clock /></el-icon>
+                  <span>{{ formatDate(workflow.created_at) }}</span>
+                </div>
+                <div class="meta-item">
+                  <el-icon><DocumentChecked /></el-icon>
+                  <span>{{ getNodeCount(workflow.workflow_data) }} 노드</span>
+                </div>
+                <div class="meta-item">
+                  <el-icon><User /></el-icon>
+                  <span>소유자: 관리자</span>
+                </div>
+              </div>
+
+                                            <div class="workflow-actions">
+                 <el-button type="primary" size="small" @click="executeWorkflow(workflow)">
+                   <el-icon><CaretRight /></el-icon>
+                   실행
+                 </el-button>
+                 <el-button size="small" @click="viewWorkflowDetails(workflow)">
+                   <el-icon><View /></el-icon>
+                   상세보기
+                 </el-button>
+               </div>
+            </div>
+          </el-card>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 워크플로우 상세 다이얼로그 -->
+    <el-dialog v-model="showDetailDialog" title="워크플로우 상세 정보" width="80%" top="5vh">
+      <div v-if="selectedWorkflow" class="workflow-detail">
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-card header="기본 정보">
+              <el-descriptions :column="1" border>
+                <el-descriptions-item label="ID">{{ selectedWorkflow.id }}</el-descriptions-item>
+                <el-descriptions-item label="이름">{{ selectedWorkflow.name }}</el-descriptions-item>
+                <el-descriptions-item label="설명">{{ selectedWorkflow.description || '설명 없음' }}</el-descriptions-item>
+                <el-descriptions-item label="생성일">{{ formatDate(selectedWorkflow.created_at) }}</el-descriptions-item>
+                <el-descriptions-item label="노드 수">{{ getNodeCount(selectedWorkflow.workflow_data) }}</el-descriptions-item>
+                <el-descriptions-item label="소유자">관리자</el-descriptions-item>
+              </el-descriptions>
+            </el-card>
+          </el-col>
+          
+          <el-col :span="12">
+            <el-card header="워크플로우 미리보기">
+              <div class="workflow-preview">
+                <pre class="json-preview">{{ formatWorkflowPreview(selectedWorkflow.workflow_data) }}</pre>
+              </div>
+            </el-card>
+          </el-col>
+        </el-row>
+        
+        <el-row style="margin-top: 20px">
+          <el-col :span="24">
+            <el-card header="전체 JSON 데이터">
+              <div class="json-viewer">
+                <el-button size="small" @click="copyWorkflowJSON" style="margin-bottom: 10px">
+                  <el-icon><CopyDocument /></el-icon>
+                  JSON 복사
+                </el-button>
+                <pre class="json-content">{{ formatJSON(selectedWorkflow.workflow_data) }}</pre>
+              </div>
+            </el-card>
+          </el-col>
+        </el-row>
+      </div>
+      
+      <template #footer>
+        <el-button @click="showDetailDialog = false">닫기</el-button>
+        <el-button type="primary" @click="executeWorkflow(selectedWorkflow)">
+          <el-icon><CaretRight /></el-icon>
+          실행
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 워크플로우 실행 입력 다이얼로그 -->
+    <el-dialog v-model="showExecuteDialog" title="워크플로우 실행" width="600px">
+      <div v-if="executeWorkflowData">
+        <div class="execute-header">
+          <h3>{{ executeWorkflowData.name }}</h3>
+          <p>{{ executeWorkflowData.description || '설명이 없습니다.' }}</p>
+        </div>
+
+        <!-- 입력 필드가 있는 경우 -->
+        <div v-if="hasInputFields" class="input-fields-section">
+          <el-divider content-position="left">입력 필드</el-divider>
+          
+          <el-form :model="inputValues" label-width="120px" size="default">
+            <div v-for="(fieldConfig, placeholder) in executeWorkflowData.input_fields" :key="placeholder" class="input-field">
+              <el-form-item :label="fieldConfig.label || placeholder.replace(/[\[\]]/g, '')">
+                <!-- 텍스트 입력 -->
+                <el-input 
+                  v-if="fieldConfig.type === 'text'"
+                  v-model="inputValues[placeholder]"
+                  :placeholder="fieldConfig.description || '값을 입력하세요'"
+                />
+                
+                <!-- 텍스트 박스 -->
+                <el-input 
+                  v-else-if="fieldConfig.type === 'textarea'"
+                  v-model="inputValues[placeholder]"
+                  type="textarea"
+                  :rows="3"
+                  :placeholder="fieldConfig.description || '값을 입력하세요'"
+                />
+                
+                <!-- 숫자 입력 -->
+                <el-input-number
+                  v-else-if="fieldConfig.type === 'number'"
+                  v-model="inputValues[placeholder]"
+                  :min="fieldConfig.min ? parseInt(fieldConfig.min) : undefined"
+                  :max="fieldConfig.max ? parseInt(fieldConfig.max) : undefined"
+                  :placeholder="fieldConfig.description || '숫자를 입력하세요'"
+                  style="width: 100%"
+                />
+                
+                <!-- 소수 입력 -->
+                <el-input-number
+                  v-else-if="fieldConfig.type === 'float'"
+                  v-model="inputValues[placeholder]"
+                  :min="fieldConfig.min ? parseFloat(fieldConfig.min) : undefined"
+                  :max="fieldConfig.max ? parseFloat(fieldConfig.max) : undefined"
+                  :step="fieldConfig.step ? parseFloat(fieldConfig.step) : 0.1"
+                  :precision="2"
+                  :placeholder="fieldConfig.description || '소수를 입력하세요'"
+                  style="width: 100%"
+                />
+                
+                <!-- 선택 -->
+                <el-select
+                  v-else-if="fieldConfig.type === 'select'"
+                  v-model="inputValues[placeholder]"
+                  :placeholder="fieldConfig.description || '옵션을 선택하세요'"
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="option in fieldConfig.options"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-select>
+                
+                <div v-if="fieldConfig.description" class="field-description">
+                  {{ fieldConfig.description }}
+                </div>
+              </el-form-item>
+            </div>
+          </el-form>
+        </div>
+        
+        <!-- 입력 필드가 없는 경우 -->
+        <div v-else class="no-input-fields">
+          <el-icon><InfoFilled /></el-icon>
+          <span>이 워크플로우는 추가 입력이 필요하지 않습니다.</span>
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="showExecuteDialog = false">취소</el-button>
+        <el-button type="primary" @click="confirmExecuteWorkflow" :loading="loading.execute">
+          <el-icon><CaretRight /></el-icon>
+          실행
+        </el-button>
+      </template>
+    </el-dialog>
+
+    
+
+         <!-- 워크플로우 부족 안내 -->
+     <el-alert
+       v-if="!loading.list && workflows.length === 0"
+       title="워크플로우 관리 안내"
+       type="info"
+       :closable="false"
+       style="margin-top: 20px"
+     >
+       <template #default>
+         <p>워크플로우 등록 및 수정은 관리자만 가능합니다.</p>
+         <p>새로운 워크플로우가 필요하거나 수정이 필요하시면 관리자에게 문의해주세요.</p>
+         <p>일반 사용자는 워크플로우 조회 및 실행만 가능합니다.</p>
+       </template>
+     </el-alert>
+  </div>
+</template>
+
+<script>
+import { ref, reactive, onMounted, computed } from 'vue'
+import { ElMessage } from 'element-plus'
+import { 
+  Search, 
+  Refresh, 
+  CaretRight, 
+  View, 
+  Download, 
+  Clock, 
+  DocumentChecked, 
+  User, 
+  InfoFilled, 
+  CopyDocument
+} from '@element-plus/icons-vue'
+import axios from 'axios'
+
+export default {
+  name: 'Workflows',
+  components: {
+    Search,
+    Refresh,
+    CaretRight,
+    View,
+    Download,
+    Clock,
+    DocumentChecked,
+    User,
+    InfoFilled,
+    CopyDocument
+  },
+     setup() {
+     const showDetailDialog = ref(false)
+     const showExecuteDialog = ref(false)
+     const selectedWorkflow = ref(null)
+     const executeWorkflowData = ref(null)
+     const inputValues = reactive({})
+     const searchTerm = ref('')
+
+     const loading = reactive({
+       list: false,
+       execute: false
+     })
+
+     const workflows = ref([])
+     const filteredWorkflows = ref([])
+
+    // 입력 필드가 있는지 확인하는 computed
+    const hasInputFields = computed(() => {
+      return executeWorkflowData.value && 
+             executeWorkflowData.value.input_fields && 
+             Object.keys(executeWorkflowData.value.input_fields).length > 0
+    })
+
+    onMounted(() => {
+      loadWorkflows()
+    })
+
+    const loadWorkflows = async () => {
+      loading.list = true
+      try {
+        const response = await axios.get('/api/workflows/')
+        workflows.value = response.data
+        filterWorkflows()
+      } catch (error) {
+        console.error('워크플로우 목록 로드 오류:', error)
+        ElMessage.error('워크플로우 목록을 불러오는 중 오류가 발생했습니다.')
+      } finally {
+        loading.list = false
+      }
+    }
+
+    const filterWorkflows = () => {
+      if (!searchTerm.value.trim()) {
+        filteredWorkflows.value = workflows.value
+      } else {
+        const term = searchTerm.value.toLowerCase()
+        filteredWorkflows.value = workflows.value.filter(workflow =>
+          workflow.name.toLowerCase().includes(term) ||
+          workflow.description?.toLowerCase().includes(term)
+        )
+      }
+    }
+
+    const executeWorkflow = (workflow) => {
+      executeWorkflowData.value = workflow
+      
+      // 입력값 초기화 및 기본값 설정
+      Object.keys(inputValues).forEach(key => {
+        delete inputValues[key]
+      })
+      
+      if (workflow.input_fields) {
+        Object.keys(workflow.input_fields).forEach(placeholder => {
+          const fieldConfig = workflow.input_fields[placeholder]
+          let defaultValue = fieldConfig.defaultValue || ''
+          
+          // 타입에 따른 기본값 변환
+          if (fieldConfig.type === 'number') {
+            defaultValue = defaultValue ? parseInt(defaultValue) : 0
+          } else if (fieldConfig.type === 'float') {
+            defaultValue = defaultValue ? parseFloat(defaultValue) : 0.0
+          }
+          
+          inputValues[placeholder] = defaultValue
+        })
+      }
+      
+      showExecuteDialog.value = true
+    }
+
+    const confirmExecuteWorkflow = async () => {
+      if (!executeWorkflowData.value) return
+      
+      loading.execute = true
+      try {
+        // 워크플로우 실행 (입력 필드 유무에 관계없이 workflows/execute API 사용)
+        const response = await axios.post('/api/workflows/execute', {
+          workflow_id: executeWorkflowData.value.id,
+          input_values: hasInputFields.value ? { ...inputValues } : {}
+        })
+        
+        ElMessage.success(`워크플로우 "${executeWorkflowData.value.name}" 실행을 시작했습니다.`)
+        showExecuteDialog.value = false
+      } catch (error) {
+        console.error('워크플로우 실행 오류:', error)
+        if (error.response?.data?.detail) {
+          ElMessage.error(`실행 오류: ${error.response.data.detail}`)
+        } else {
+          ElMessage.error('워크플로우 실행 중 오류가 발생했습니다.')
+        }
+      } finally {
+        loading.execute = false
+      }
+    }
+
+    const exportWorkflow = (workflow) => {
+      const dataStr = JSON.stringify(workflow.workflow_data, null, 2)
+      const blob = new Blob([dataStr], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${workflow.name}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      ElMessage.success('워크플로우가 내보내기되었습니다.')
+    }
+
+    const viewWorkflowDetails = (workflow) => {
+      selectedWorkflow.value = workflow
+      showDetailDialog.value = true
+    }
+
+    const copyWorkflowJSON = () => {
+      if (!selectedWorkflow.value) return
+      
+      const jsonData = JSON.stringify(selectedWorkflow.value.workflow_data, null, 2)
+      navigator.clipboard.writeText(jsonData)
+        .then(() => {
+          ElMessage.success('워크플로우 JSON이 클립보드에 복사되었습니다.')
+        })
+        .catch(() => {
+          ElMessage.error('클립보드 복사에 실패했습니다.')
+        })
+    }
+
+    const formatDate = (dateString) => {
+      const date = new Date(dateString)
+      return date.toLocaleDateString('ko-KR', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    }
+
+    const getNodeCount = (workflowData) => {
+      if (!workflowData || typeof workflowData !== 'object') return 0
+      if (workflowData.nodes) return Object.keys(workflowData.nodes).length
+      if (Array.isArray(workflowData)) return workflowData.length
+      return Object.keys(workflowData).length
+    }
+
+    const formatWorkflowPreview = (workflowData) => {
+      if (!workflowData) return '{}'
+      const preview = {}
+      Object.keys(workflowData).slice(0, 5).forEach(key => {
+        if (typeof workflowData[key] === 'object') {
+          preview[key] = `[${typeof workflowData[key]}]`
+        } else {
+          preview[key] = workflowData[key]
+        }
+      })
+      if (Object.keys(workflowData).length > 5) {
+        preview['...'] = `+${Object.keys(workflowData).length - 5} more`
+      }
+      return JSON.stringify(preview, null, 2)
+    }
+
+    const formatJSON = (data) => {
+      if (typeof data === 'string') {
+        try {
+          data = JSON.parse(data)
+        } catch {
+          return data
+        }
+      }
+      return JSON.stringify(data, null, 2)
+    }
+
+    const getStatusDisplay = (status) => {
+      switch (status) {
+        case 'OPEN':
+          return '오픈'
+        case 'WAIT':
+          return '대기'
+        default:
+          return status
+      }
+    }
+
+    
+
+         const handleCommand = (command) => {
+       if (command.action === 'view') {
+         viewWorkflowDetails(command.workflow)
+       } else if (command.action === 'export') {
+         exportWorkflow(command.workflow)
+       }
+     }
+
+         return {
+       showDetailDialog,
+       showExecuteDialog,
+       selectedWorkflow,
+       executeWorkflowData,
+       inputValues,
+       hasInputFields,
+       searchTerm,
+       loading,
+       workflows,
+       filteredWorkflows,
+       loadWorkflows,
+       filterWorkflows,
+       executeWorkflow,
+       confirmExecuteWorkflow,
+       exportWorkflow,
+       viewWorkflowDetails,
+       copyWorkflowJSON,
+       formatDate,
+       getNodeCount,
+       formatWorkflowPreview,
+       formatJSON,
+       getStatusDisplay,
+       handleCommand
+     }
+  }
+}
+</script>
+
+<style scoped>
+.workflows-page {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.page-header h1 {
+  margin: 0 0 10px 0;
+  color: #303133;
+  font-size: 32px;
+  font-weight: bold;
+}
+
+.page-header p {
+  margin: 0;
+  color: #909399;
+  font-size: 16px;
+}
+
+.workflows-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.loading-container {
+  padding: 20px;
+}
+
+.empty-container {
+  padding: 40px 20px;
+}
+
+.workflows-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 20px;
+}
+
+.workflow-card {
+  border-radius: 8px;
+  transition: transform 0.2s;
+}
+
+.workflow-card:hover {
+  transform: translateY(-2px);
+}
+
+.workflow-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.workflow-title h3 {
+  margin: 0 0 8px 0;
+  color: #303133;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.workflow-content {
+  padding-top: 10px;
+}
+
+.workflow-description {
+  color: #606266;
+  margin: 0 0 16px 0;
+  line-height: 1.4;
+  min-height: 40px;
+}
+
+.workflow-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: #909399;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.workflow-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.workflow-detail {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.workflow-preview {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.json-preview {
+  background: #f5f7fa;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 12px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #2c3e50;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.json-viewer {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.json-content {
+  background: #f5f7fa;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 12px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #2c3e50;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+}
+
+/* 워크플로우 실행 다이얼로그 스타일 */
+.execute-header {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.execute-header h3 {
+  margin: 0 0 8px 0;
+  color: #303133;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.execute-header p {
+  margin: 0;
+  color: #606266;
+  font-size: 14px;
+}
+
+.input-fields-section {
+  margin-top: 16px;
+}
+
+.input-field {
+  margin-bottom: 16px;
+}
+
+.field-description {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.no-input-fields {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 20px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  color: #606266;
+  font-size: 14px;
+}
+
+.no-input-fields .el-icon {
+  font-size: 16px;
+  color: #409eff;
+}
+
+
+
+ .dialog-footer {
+   display: flex;
+   justify-content: flex-end;
+   gap: 10px;
+ }
+
+ /* 더보기 버튼 스타일 */
+ .more-button {
+   font-size: 18px;
+   font-weight: bold;
+   line-height: 1;
+   padding: 4px 8px;
+   color: #606266;
+   min-width: 24px;
+   text-align: center;
+ }
+
+ .more-button:hover {
+   color: #409eff;
+   background-color: #ecf5ff;
+ }
+ 
+ @media (max-width: 768px) {
+  .workflows-page {
+    padding: 10px;
+  }
+  
+  .section-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .header-actions {
+    justify-content: space-between;
+  }
+  
+  .workflows-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .execute-header h3 {
+    font-size: 16px;
+  }
+}
+</style> 

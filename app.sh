@@ -1,7 +1,7 @@
 #!/bin/bash
 
 APP_NAME="ComfyUI_Workflow_Frontend"
-APP_DIR="/c/workspace/create_iamge_project/ComfyUI_Workflow_Frontend"
+APP_DIR="/home/ubuntu/ComfyUI_Workflow_Frontend"
 NODE_DIR="$APP_DIR/node_modules"
 NPM="npm"
 LOGFILE="$APP_DIR/server.log"

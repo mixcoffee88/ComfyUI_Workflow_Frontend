@@ -3,7 +3,7 @@ import { ElMessage } from 'element-plus'
 
 // axios 인스턴스 생성
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:9000',
+  baseURL: import.meta.env.VITE_API_URL || 'http://49.247.43.3:9000',
   timeout: 30000, // 30초 타임아웃
   headers: {
     'Content-Type': 'application/json',

@@ -195,9 +195,30 @@ export default {
     async loadWorkflows() {
       this.loading = true
       try {
-        const response = await axios.get('/api/admin/workflows')
-        this.workflows = response.data
-        this.filterWorkflows()
+        const params = {
+          page: this.pagination.currentPage,
+          page_size: this.pagination.pageSize,
+          ...(this.workflowSearch && { search: this.workflowSearch }),
+          ...(this.workflowStatusFilter && { status: this.workflowStatusFilter })
+        }
+        
+        const response = await axios.get('/api/admin/workflows', { params })
+        
+        // 페이지네이션된 응답에서 data 필드 추출
+        this.workflows = response.data.data || response.data
+        this.pagination.total = response.data.pagination?.total || this.workflows.length
+        
+        // 필터링된 워크플로우 설정 (서버에서 이미 필터링됨)
+        this.filteredWorkflows = this.workflows
+        
+        console.log('🔍 관리자 워크플로우 로드:', {
+          page: this.pagination.currentPage,
+          pageSize: this.pagination.pageSize,
+          total: this.pagination.total,
+          loadedCount: this.workflows.length,
+          search: this.workflowSearch,
+          statusFilter: this.workflowStatusFilter
+        })
       } catch (error) {
         ElMessage.error('워크플로우 목록을 불러오는데 실패했습니다.')
         console.error('Error loading workflows:', error)
@@ -206,25 +227,9 @@ export default {
       }
     },
     filterWorkflows() {
-      let filtered = [...this.workflows]
-      
-      // 검색 필터
-      if (this.workflowSearch) {
-        filtered = filtered.filter(workflow => 
-          workflow.name.toLowerCase().includes(this.workflowSearch.toLowerCase()) ||
-          workflow.description.toLowerCase().includes(this.workflowSearch.toLowerCase())
-        )
-      }
-      
-      // 상태 필터
-      if (this.workflowStatusFilter) {
-        filtered = filtered.filter(workflow => 
-          workflow.status === this.workflowStatusFilter
-        )
-      }
-      
-      this.filteredWorkflows = filtered
-      this.pagination.total = filtered.length
+      // 서버 사이드 필터링으로 변경
+      this.pagination.currentPage = 1
+      this.loadWorkflows()
     },
     handleWorkflowSelection(selection) {
       this.selectedWorkflows = selection
@@ -297,9 +302,11 @@ export default {
     handlePageSizeChange(size) {
       this.pagination.pageSize = size
       this.pagination.currentPage = 1
+      this.loadWorkflows()
     },
     handlePageChange(page) {
       this.pagination.currentPage = page
+      this.loadWorkflows()
     },
     formatDate(dateString) {
       return new Date(dateString).toLocaleDateString('ko-KR')

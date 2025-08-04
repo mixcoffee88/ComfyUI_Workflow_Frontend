@@ -1,7 +1,7 @@
 <template>
   <div class="users-section">
     <div class="section-header">
-      <el-button type="primary" @click="showCreateUserDialog = true">
+      <el-button type="primary" @click="createNewUser">
         <el-icon><Plus /></el-icon>
         사용자 추가
       </el-button>
@@ -62,7 +62,16 @@
           <el-input v-model="userForm.username" />
         </el-form-item>
         <el-form-item label="이메일" prop="email">
-          <el-input v-model="userForm.email" />
+          <el-input 
+            v-model="userForm.email" 
+            :readonly="editingUser"
+            :placeholder="editingUser ? '이메일은 수정할 수 없습니다' : '이메일을 입력하세요'"
+            :class="{ 'readonly-field': editingUser }"
+          />
+          <div v-if="editingUser" class="field-note">
+            <el-icon><InfoFilled /></el-icon>
+            <span>이메일은 수정할 수 없습니다</span>
+          </div>
         </el-form-item>
         <el-form-item label="비밀번호" prop="password" v-if="!editingUser">
           <el-input v-model="userForm.password" type="password" />
@@ -88,7 +97,7 @@
 </template>
 
 <script>
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import { Plus, Refresh, InfoFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
 
@@ -96,7 +105,8 @@ export default {
   name: 'UserManagement',
   components: {
     Plus,
-    Refresh
+    Refresh,
+    InfoFilled
   },
   data() {
     return {
@@ -144,6 +154,11 @@ export default {
       } finally {
         this.loading = false
       }
+    },
+    createNewUser() {
+      this.editingUser = null
+      this.resetUserForm()
+      this.showCreateUserDialog = true
     },
     editUser(user) {
       this.editingUser = user
@@ -235,5 +250,24 @@ export default {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.readonly-field {
+  background-color: #f5f7fa;
+  color: #909399;
+}
+
+.field-note {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.field-note .el-icon {
+  font-size: 14px;
+  color: #409eff;
 }
 </style> 

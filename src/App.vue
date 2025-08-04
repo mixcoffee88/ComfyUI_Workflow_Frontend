@@ -35,7 +35,7 @@
                 </span>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="profile">프로필</el-dropdown-item>
+                    <el-dropdown-item command="changePass">비밀번호 변경</el-dropdown-item>
                     <el-dropdown-item command="logout" divided>로그아웃</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -77,21 +77,32 @@
           </el-main>
         </el-container>
       </el-container>
+      
+      <!-- 비밀번호 변경 다이얼로그 -->
+      <PasswordChangeDialog
+        v-model="showPasswordDialog"
+        @password-changed="handlePasswordChanged"
+      />
     </el-config-provider>
   </div>
 </template>
 
 <script>
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useStore } from 'vuex'
 import { useRoute } from 'vue-router'
 import { startConnectionMonitoring, stopConnectionMonitoring } from '@/utils/api'
+import PasswordChangeDialog from '@/components/PasswordChangeDialog.vue'
 
 export default {
   name: 'App',
+  components: {
+    PasswordChangeDialog
+  },
   setup() {
     const store = useStore()
     const route = useRoute()
+    const showPasswordDialog = ref(false)
 
     const loading = computed(() => store.state.loading)
     const loadingText = computed(() => store.state.loadingText)
@@ -186,10 +197,14 @@ export default {
     const handleUserAction = (command) => {
       if (command === 'logout') {
         store.dispatch('auth/logout')
-      } else if (command === 'profile') {
-        // 프로필 페이지로 이동
-        console.log('프로필 페이지 구현 예정')
+      } else if (command === 'changePass') {
+        showPasswordDialog.value = true
       }
+    }
+
+    const handlePasswordChanged = () => {
+      // 비밀번호 변경 성공 시 추가 작업이 필요한 경우 여기에 구현
+      console.log('비밀번호가 성공적으로 변경되었습니다')
     }
 
     return {
@@ -200,8 +215,10 @@ export default {
       currentUser,
       isLoginPage,
       locale,
+      showPasswordDialog,
       clearNotification,
-      handleUserAction
+      handleUserAction,
+      handlePasswordChanged
     }
   }
 }

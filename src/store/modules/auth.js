@@ -65,10 +65,10 @@ const actions = {
     return false
   },
 
-  async login({ commit, dispatch }, { username, password }) {
+  async login({ commit, dispatch }, { email, password }) {
     try {
       const formData = new FormData()
-      formData.append('username', username)
+      formData.append('email', email)
       formData.append('password', password)
 
       const response = await axios.post('/api/auth/login', formData)

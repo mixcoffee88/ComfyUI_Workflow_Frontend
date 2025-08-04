@@ -108,7 +108,7 @@
           >
             <div class="execution-info">
               <div class="execution-workflow">{{ execution.workflow?.name || 'Unknown' }}</div>
-              <div class="execution-time">{{ formatDate(execution.created_at) }}</div>
+              <div class="execution-time">{{ formatDate(execution.completed_at) }}</div>
             </div>
             <div class="execution-status">
               <el-tag 
@@ -165,7 +165,7 @@ export default {
     )
     
     const recentExecutions = computed(() => 
-      store.getters['executions/myExecutions'].slice(0, 5)
+      store.getters['executions/myExecutions']
     )
 
     onMounted(async () => {
@@ -181,9 +181,20 @@ export default {
         const workflows = await store.dispatch('workflows/fetchWorkflows')
         stats.workflows = workflows.length
 
-        // 본인 실행 기록 데이터 로드
-        const executions = await store.dispatch('executions/fetchMyExecutions')
-        stats.executions = executions.length
+        // 본인 실행 기록 데이터 로드 (최근 5개만)
+        const executions = await store.dispatch('executions/fetchMyExecutions', {
+          page: 1,
+          page_size: 5
+        })
+        
+        // 전체 실행기록 개수 가져오기
+        try {
+          const countResponse = await axios.get('/api/executions/count')
+          stats.executions = countResponse.data.count
+        } catch (error) {
+          console.warn('실행기록 개수를 가져올 수 없습니다:', error)
+          stats.executions = executions.length
+        }
 
         // 큐 상태 확인
         try {

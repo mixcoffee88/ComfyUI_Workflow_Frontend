@@ -13,7 +13,7 @@
             v-model="searchQuery"
             placeholder="워크플로우명으로 검색"
             clearable
-            @input="filterExecutions"
+            @input="debouncedFilter"
           >
             <template #prefix>
               <el-icon><Search /></el-icon>
@@ -35,7 +35,11 @@
           </el-select>
         </el-col>
         <el-col :span="4">
-          <el-button type="primary" @click="loadExecutions">
+          <el-button 
+            type="primary" 
+            @click="loadExecutions(true)"
+            :loading="refreshing"
+          >
             <el-icon><Refresh /></el-icon>
             새로고침
           </el-button>
@@ -46,7 +50,7 @@
     <!-- 실행 기록 테이블 -->
     <div class="table-section">
       <el-table
-        :data="filteredExecutions"
+        :data="paginatedExecutions"
         v-loading="loading"
         stripe
         style="width: 100%"
@@ -220,7 +224,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Download, View } from '@element-plus/icons-vue'
 import api from '@/utils/api'
@@ -233,13 +237,16 @@ export default {
   },
   setup() {
     const executions = ref([])
-    const filteredExecutions = ref([])
     const loading = ref(false)
+    const refreshing = ref(false)
     const searchQuery = ref('')
     const statusFilter = ref('')
     const currentPage = ref(1)
     const pageSize = ref(20)
     const totalExecutions = ref(0)
+    
+    let refreshInterval = null
+    let debounceTimer = null
     
     const showExecutionDetails = ref(false)
     const selectedExecution = ref(null)
@@ -248,41 +255,68 @@ export default {
     const showImagePreview = ref(false)
     const previewImageUrl = ref('')
 
+    // 서버에서 페이지네이션된 데이터를 받으므로 직접 사용
+    const paginatedExecutions = computed(() => {
+      return executions.value
+    })
+
     // 실행 기록 로드
-    const loadExecutions = async () => {
-      loading.value = true
+    const loadExecutions = async (showLoading = true, resetPage = false) => {
+      if (showLoading) {
+        loading.value = true
+      } else {
+        refreshing.value = true
+      }
+      
       try {
-        const response = await api.get('/api/executions/my')
-        executions.value = response.data
-        filterExecutions()
-        totalExecutions.value = executions.value.length
+        // 검색어와 상태 필터를 URL 파라미터로 전달
+        const params = {
+          page: resetPage ? 1 : currentPage.value,
+          page_size: pageSize.value,
+          ...(searchQuery.value && { search: searchQuery.value }),
+          ...(statusFilter.value && { status: statusFilter.value })
+        }
+        
+        const response = await api.get('/api/executions/my', { params })
+        
+        // 응답 구조 변경
+        executions.value = response.data.data
+        totalExecutions.value = response.data.pagination.total
+        
+        if (resetPage) {
+          currentPage.value = 1
+        }
+        
+        console.log('🔍 API 응답:', {
+          page: response.data.pagination.page,
+          pageSize: response.data.pagination.page_size,
+          total: response.data.pagination.total,
+          totalPages: response.data.pagination.total_pages,
+          dataCount: executions.value.length
+        })
+        
       } catch (error) {
         console.error('실행 기록 로드 실패:', error)
         ElMessage.error('실행 기록을 불러오는데 실패했습니다.')
       } finally {
         loading.value = false
+        refreshing.value = false
       }
     }
 
-    // 필터링
+    // 디바운스된 검색
+    const debouncedFilter = () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer)
+      }
+      debounceTimer = setTimeout(() => {
+        loadExecutions(false, true) // 검색 시 첫 페이지로 이동
+      }, 500)
+    }
+
+    // 필터링 (상태 변경 시)
     const filterExecutions = () => {
-      let filtered = executions.value
-
-      // 검색어 필터
-      if (searchQuery.value) {
-        filtered = filtered.filter(execution => 
-          execution.workflow?.name?.toLowerCase().includes(searchQuery.value.toLowerCase())
-        )
-      }
-
-      // 상태 필터
-      if (statusFilter.value) {
-        filtered = filtered.filter(execution => 
-          execution.status === statusFilter.value
-        )
-      }
-
-      filteredExecutions.value = filtered
+      loadExecutions(false, true) // 필터 변경 시 첫 페이지로 이동
     }
 
     // 상태 타입 반환
@@ -342,7 +376,7 @@ export default {
 
         await api.delete(`/api/executions/${execution.id}`)
         ElMessage.success('실행 기록이 삭제되었습니다.')
-        loadExecutions()
+        loadExecutions(false, false) // 현재 페이지 유지하며 새로고침
       } catch (error) {
         if (error !== 'cancel') {
           console.error('실행 기록 삭제 실패:', error)
@@ -367,14 +401,30 @@ export default {
       showImagePreview.value = true
     }
 
+    // 자동 새로고침
+    const startAutoRefresh = () => {
+      refreshInterval = setInterval(() => {
+        loadExecutions(false, false) // 현재 페이지 유지하며 새로고침
+      }, 30000) // 30초마다 새로고침
+    }
+
+    const stopAutoRefresh = () => {
+      if (refreshInterval) {
+        clearInterval(refreshInterval)
+        refreshInterval = null
+      }
+    }
+
     // 페이지네이션
     const handleSizeChange = (val) => {
       pageSize.value = val
       currentPage.value = 1
+      loadExecutions(false, false) // 페이지 크기 변경 시 현재 페이지 유지
     }
 
     const handleCurrentChange = (val) => {
       currentPage.value = val
+      loadExecutions(false, false) // 페이지 변경 시 서버에서 데이터 로드
     }
 
     const closeExecutionDetails = () => {
@@ -383,13 +433,22 @@ export default {
     }
 
     onMounted(() => {
-      loadExecutions()
+      loadExecutions(true, false) // 초기 로드
+      startAutoRefresh()
+    })
+
+    onUnmounted(() => {
+      stopAutoRefresh()
+      if (debounceTimer) {
+        clearTimeout(debounceTimer)
+      }
     })
 
     return {
       executions,
-      filteredExecutions,
+      paginatedExecutions,
       loading,
+      refreshing,
       searchQuery,
       statusFilter,
       currentPage,
@@ -403,6 +462,7 @@ export default {
       previewImageUrl,
       loadExecutions,
       filterExecutions,
+      debouncedFilter,
       getStatusType,
       getStatusText,
       formatDateTime,

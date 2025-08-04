@@ -110,9 +110,23 @@ export default {
     async loadExecutions() {
       this.loading = true
       try {
-        const response = await axios.get('/api/admin/executions')
-        this.executions = response.data
-        this.pagination.total = this.executions.length
+        const params = {
+          page: this.pagination.currentPage,
+          page_size: this.pagination.pageSize
+        }
+        
+        const response = await axios.get('/api/admin/executions', { params })
+        
+        // 페이지네이션된 응답에서 data 필드 추출
+        this.executions = response.data.data || response.data
+        this.pagination.total = response.data.pagination?.total || this.executions.length
+        
+        console.log('🔍 관리자 실행 기록 로드:', {
+          page: this.pagination.currentPage,
+          pageSize: this.pagination.pageSize,
+          total: this.pagination.total,
+          loadedCount: this.executions.length
+        })
       } catch (error) {
         ElMessage.error('실행 기록을 불러오는데 실패했습니다.')
         console.error('Error loading executions:', error)
@@ -169,9 +183,11 @@ export default {
     handlePageSizeChange(size) {
       this.pagination.pageSize = size
       this.pagination.currentPage = 1
+      this.loadExecutions()
     },
     handlePageChange(page) {
       this.pagination.currentPage = page
+      this.loadExecutions()
     },
     formatDate(dateString) {
       return new Date(dateString).toLocaleDateString('ko-KR')

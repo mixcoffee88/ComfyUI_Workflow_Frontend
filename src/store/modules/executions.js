@@ -54,12 +54,14 @@ const actions = {
     }
   },
 
-  async fetchMyExecutions({ commit }) {
+  async fetchMyExecutions({ commit }, params = {}) {
     commit('SET_LOADING', true)
     try {
-      const response = await axios.get('/api/executions/my')
-      commit('SET_EXECUTIONS', response.data)
-      return response.data
+      const response = await axios.get('/api/executions/my', { params })
+      // 페이지네이션된 응답에서 data 필드 추출
+      const executions = response.data.data || response.data
+      commit('SET_EXECUTIONS', executions)
+      return executions
     } catch (error) {
       console.error('본인 실행 기록 가져오기 오류:', error)
       throw error

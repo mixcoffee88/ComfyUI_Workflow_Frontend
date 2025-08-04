@@ -13,11 +13,11 @@
         class="login-form-content"
         size="large"
       >
-        <el-form-item prop="username">
+        <el-form-item prop="email">
           <el-input
-            v-model="loginForm.username"
-            placeholder="사용자명"
-            prefix-icon="User"
+            v-model="loginForm.email"
+            placeholder="이메일"
+            prefix-icon="Message"
             @keyup.enter="handleLogin"
           />
         </el-form-item>
@@ -67,13 +67,14 @@ export default {
     const loading = ref(false)
 
     const loginForm = reactive({
-      username: '',
+      email: '',
       password: ''
     })
 
     const loginRules = {
-      username: [
-        { required: true, message: '사용자명을 입력해주세요', trigger: 'blur' }
+      email: [
+        { required: true, message: '이메일을 입력해주세요', trigger: 'blur' },
+        { type: 'email', message: '올바른 이메일 형식을 입력해주세요', trigger: 'blur' }
       ],
       password: [
         { required: true, message: '비밀번호를 입력해주세요', trigger: 'blur' },
@@ -90,7 +91,7 @@ export default {
       loading.value = true
       try {
         const result = await store.dispatch('auth/login', {
-          username: loginForm.username,
+          email: loginForm.email,
           password: loginForm.password
         })
 

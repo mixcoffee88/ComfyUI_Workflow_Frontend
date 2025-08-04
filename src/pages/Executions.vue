@@ -151,21 +151,38 @@
 
         <!-- 결과 이미지 -->
         <div v-if="selectedExecution.assets && selectedExecution.assets.length > 0" class="results-section">
-          <h3>생성된 이미지</h3>
+          <h3>생성된 이미지 ({{ selectedExecution.assets.length }}개)</h3>
           <div class="image-grid">
             <div
               v-for="asset in selectedExecution.assets"
               :key="asset.id"
               class="image-item"
             >
-              <img :src="asset.image_url" :alt="`결과 이미지 ${asset.id}`" />
+              <img 
+                :src="asset.image_url" 
+                :alt="`결과 이미지 ${asset.id}`" 
+                @click="previewImage(asset.image_url)"
+                class="clickable-image"
+              />
+              <div class="image-info">
+                <div class="image-id">ID: {{ asset.id }}</div>
+                <div class="image-date">{{ formatDateTime(asset.created_at) }}</div>
+              </div>
               <div class="image-actions">
                 <el-button size="small" @click="downloadImage(asset.image_url)">
+                  <el-icon><Download /></el-icon>
                   다운로드
+                </el-button>
+                <el-button size="small" @click="previewImage(asset.image_url)">
+                  <el-icon><View /></el-icon>
+                  보기
                 </el-button>
               </div>
             </div>
           </div>
+        </div>
+        <div v-else class="no-results">
+          <el-empty description="생성된 이미지가 없습니다." />
         </div>
       </div>
     </el-dialog>
@@ -178,13 +195,34 @@
     >
       <pre v-if="inputDataJson">{{ inputDataJson }}</pre>
     </el-dialog>
+
+    <!-- 이미지 프리뷰 모달 -->
+    <el-dialog
+      v-model="showImagePreview"
+      title="이미지 프리뷰"
+      width="80%"
+      center
+    >
+      <div class="image-preview-container">
+        <img :src="previewImageUrl" alt="이미지 프리뷰" class="preview-image" />
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showImagePreview = false">닫기</el-button>
+          <el-button type="primary" @click="downloadImage(previewImageUrl)">
+            <el-icon><Download /></el-icon>
+            다운로드
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh } from '@element-plus/icons-vue'
+import { Search, Refresh, Download, View } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 
 export default {
@@ -207,6 +245,8 @@ export default {
     const selectedExecution = ref(null)
     const showInputData = ref(false)
     const inputDataJson = ref('')
+    const showImagePreview = ref(false)
+    const previewImageUrl = ref('')
 
     // 실행 기록 로드
     const loadExecutions = async () => {
@@ -321,6 +361,12 @@ export default {
       document.body.removeChild(link)
     }
 
+    // 이미지 프리뷰
+    const previewImage = (imageUrl) => {
+      previewImageUrl.value = imageUrl
+      showImagePreview.value = true
+    }
+
     // 페이지네이션
     const handleSizeChange = (val) => {
       pageSize.value = val
@@ -353,6 +399,8 @@ export default {
       selectedExecution,
       showInputData,
       inputDataJson,
+      showImagePreview,
+      previewImageUrl,
       loadExecutions,
       filterExecutions,
       getStatusType,
@@ -362,6 +410,7 @@ export default {
       viewInputData,
       deleteExecution,
       downloadImage,
+      previewImage,
       handleSizeChange,
       handleCurrentChange,
       closeExecutionDetails
@@ -450,10 +499,38 @@ export default {
   object-fit: cover;
 }
 
+.image-info {
+  padding: 8px 10px;
+  background: #f8f9fa;
+  border-top: 1px solid #e1e8ed;
+}
+
+.image-id {
+  font-size: 12px;
+  color: #666;
+  font-weight: 600;
+}
+
+.image-date {
+  font-size: 11px;
+  color: #999;
+  margin-top: 2px;
+}
+
 .image-actions {
   padding: 10px;
   display: flex;
   justify-content: center;
+  gap: 8px;
+}
+
+.clickable-image {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.clickable-image:hover {
+  transform: scale(1.05);
 }
 
 pre {
@@ -463,5 +540,31 @@ pre {
   overflow-x: auto;
   font-family: 'Courier New', monospace;
   font-size: 12px;
+}
+
+.no-results {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.image-preview-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 600px;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 </style> 
